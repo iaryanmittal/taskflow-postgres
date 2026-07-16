@@ -1,0 +1,71 @@
+/* ===== LOGIN PAGE ===== */
+#login-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  position: relative; overflow: hidden;
+}
+
+/* Background orbs */
+.login-orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; pointer-events: none; }
+.orb1 { width: 500px; height: 500px; background: #4f8ef7; top: -150px; left: -150px; }
+.orb2 { width: 400px; height: 400px; background: #6366f1; bottom: -100px; right: -100px; }
+
+/* Card */
+.login-box {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 48px 44px;
+  width: 420px;
+  position: relative; z-index: 1;
+}
+
+/* Logo */
+.login-logo    { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; }
+.logo-icon     { width: 44px; height: 44px; background: var(--wa); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; }
+.logo-text     { font-family: var(--font-head); font-size: 22px; font-weight: 700; }
+.logo-text span { color: var(--wa); }
+
+/* Headings */
+.login-title { font-family: var(--font-head); font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+.login-sub   { color: var(--text2); font-size: 14px; margin-bottom: 32px; }
+
+/* Role toggle tabs */
+.role-tabs {
+  display: flex; gap: 8px; margin-bottom: 28px;
+  background: var(--bg3); border-radius: var(--radius-sm); padding: 4px;
+}
+.role-tab        { flex: 1; text-align: center; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); transition: all 0.2s; }
+.role-tab.active { background: var(--surface2); color: var(--text); }
+
+/* Form fields */
+.field       { margin-bottom: 18px; }
+.field label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 8px; font-weight: 500; }
+.field input,
+.field select {
+  width: 100%;
+  background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text); font-family: var(--font-body); font-size: 14px;
+  outline: none; transition: border-color 0.2s;
+}
+.field input:focus,
+.field select:focus  { border-color: var(--accent); }
+.field select option { background: var(--bg2); }
+
+/* Login button */
+.btn-login {
+  width: 100%;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  padding: 14px;
+  font-family: var(--font-head); font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s; margin-top: 4px;
+}
+.btn-login:hover { background: #3d7ef5; transform: translateY(-1px); }
+
+/* Demo hint */
+.demo-hint { text-align: center; color: var(--text3); font-size: 12px; margin-top: 20px; line-height: 1.6; }
+.demo-hint strong { color: var(--text2); }

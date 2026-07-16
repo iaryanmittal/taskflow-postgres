@@ -1,0 +1,36 @@
+/* ===== DESIGN TOKENS / CSS VARIABLES ===== */
+:root {
+  /* Backgrounds */
+  --bg:       #0d0f14;
+  --bg2:      #151820;
+  --bg3:      #1c1f2a;
+
+  /* Surfaces */
+  --surface:  #22263a;
+  --surface2: #2a2f42;
+
+  /* Borders */
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(255,255,255,0.12);
+
+  /* Text */
+  --text:     #f0f2f8;
+  --text2:    #9aa0b8;
+  --text3:    #5e6480;
+
+  /* Accent colours */
+  --accent:   #4f8ef7;
+  --accent2:  #6366f1;
+  --green:    #22c55e;
+  --amber:    #f59e0b;
+  --red:      #ef4444;
+  --wa:       #25d366;   /* WhatsApp green */
+
+  /* Radii */
+  --radius:    12px;
+  --radius-sm:  8px;
+
+  /* Typography */
+  --font-head: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+}
