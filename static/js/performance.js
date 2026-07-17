@@ -219,19 +219,58 @@ function _chartDonut(emp) {
 
 // 3. Scores horizontal bar
 function _chartScores(emp) {
-  const s = [...emp].sort((a,b) => a.score - b.score);
-  _mkChart('ch-scores', {
-    type: 'bar',
+  const s = [...emp].sort((a, b) => a.score - b.score);
+
+  // Dynamically increase chart height based on number of employees
+  const canvas = document.getElementById("ch-scores");
+  if (canvas && canvas.parentElement) {
+    canvas.parentElement.style.height = `${Math.max(300, s.length * 40)}px`;
+  }
+
+  _mkChart("ch-scores", {
+    type: "bar",
     data: {
-      labels: s.map(e => e.name.split(' ')[0]),
-      datasets: [{ label: 'Score', data: s.map(e => e.score),
-        backgroundColor: s.map(e => _scoreColor(e.score)+'99'),
+      labels: s.map(e => e.name.split(" ")[0]),
+      datasets: [{
+        label: "Score",
+        data: s.map(e => e.score),
+        backgroundColor: s.map(e => _scoreColor(e.score) + "99"),
         borderColor: s.map(e => _scoreColor(e.score)),
-        borderWidth:2, borderRadius:5 }]
+        borderWidth: 2,
+        borderRadius: 5
+      }]
     },
-    options: { indexAxis:'y', responsive:true, maintainAspectRatio:true,
-      plugins:{ legend:{ display:false } },
-      scales:{ x:{ min:0, max:100, grid:{ color:_GRID } }, y:{ grid:{ display:false } } }
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+
+      scales: {
+        x: {
+          min: 0,
+          max: 100,
+          grid: {
+            color: _GRID
+          }
+        },
+        y: {
+          grid: {
+            display: false
+          },
+          ticks: {
+            autoSkip: false,
+            font: {
+              size: 12
+            }
+          }
+        }
+      }
     }
   });
 }

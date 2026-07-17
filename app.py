@@ -314,12 +314,6 @@ def init_db() -> None:
 # ─── Auth decorators ────────────────────────────────────────────────────────
 
 def _current_active_user():
-    """Session user's row if their account is still active, else None.
-
-    Also clears the session if the account was deactivated, so a removed
-    user's existing session stops working immediately — not just their
-    next login attempt.
-    """
     uid = session.get("user_id")
     if not uid:
         return None
@@ -327,6 +321,11 @@ def _current_active_user():
     user = query("SELECT * FROM users WHERE id=%s", (uid,), one=True)
 
     if not user or not user["is_active"]:
+        session.clear()
+        return None
+
+    # NEW: Check session version
+    if session.get("session_version") != user["session_version"]:
         session.clear()
         return None
 
@@ -401,6 +400,7 @@ def login():
     session["user_id"] = user["id"]
     session["role"] = user["role"]
     session["name"] = user["name"]
+    session["session_version"] = user["session_version"]
 
     return jsonify(_public_user(user))
 
@@ -520,7 +520,7 @@ def admin_remove_user(user_id):
 
     if target["role"] == "admin":
         active_admins = query(
-            "SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=1", one=True
+            "SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=True", one=True
         )["c"]
         if active_admins <= 1:
             return jsonify({"error": "Cannot remove the last remaining admin"}), 400
@@ -789,109 +789,245 @@ def _period_since(period: str) -> str:
 @app.get("/api/performance")
 @admin_required
 def get_performance():
-    """Per-member performance for every team member (admins included)."""
-    period = request.args.get("period", "month")
-    since  = _period_since(period)
-    today  = date.today().isoformat()
+    """Per-member performance for every team member (optimized)."""
 
-    members = query("SELECT id,name,initials,color,role FROM users WHERE is_active=1")
-    result  = []
+    period = request.args.get("period", "month")
+    since = _period_since(period)
+    today = date.today().isoformat()
+
+    # -----------------------------
+    # Query 1 : All active members
+    # -----------------------------
+    members = query("""
+        SELECT id,name,initials,color,role
+        FROM users
+        WHERE is_active=TRUE
+    """)
+
+    member_map = {m["id"]: m for m in members}
+
+    # ---------------------------------------
+    # Query 2 : ALL tasks (single query)
+    # ---------------------------------------
+    tasks = query("""
+        SELECT *
+        FROM tasks
+    """)
+
+    tasks_by_member = {}
+    all_tasks_by_member = {}
+
+    for t in tasks:
+
+        uid = t["assigned_to"]
+
+        all_tasks_by_member.setdefault(uid, []).append(t)
+
+        if t["created_at"] and t["created_at"].date().isoformat() >= since:
+            tasks_by_member.setdefault(uid, []).append(t)
+
+    # ---------------------------------------
+    # Query 3 : ALL task updates
+    # ---------------------------------------
+    updates = query("""
+        SELECT *
+        FROM task_updates
+        ORDER BY created_at ASC,id ASC
+    """)
+
+    updates_by_user = {}
+    updates_by_task = {}
+
+    completion_update = {}
+    first_response = {}
+
+    for u in updates:
+
+        updates_by_user.setdefault(u["updated_by"], []).append(u)
+        updates_by_task.setdefault(u["task_id"], []).append(u)
+
+        if u["new_status"] == "completed":
+            completion_update[u["task_id"]] = u
+
+        key = (u["task_id"], u["updated_by"])
+        if key not in first_response:
+            first_response[key] = u
+
+    result = []
 
     for m in members:
+
         mid = m["id"]
 
-        assigned = query(
-            "SELECT * FROM tasks WHERE assigned_to=%s AND date(created_at)>=%s",
-            (mid, since),
-        )
-        total     = len(assigned)
-        completed = sum(1 for t in assigned if t["status"] == "completed")
-        in_prog   = sum(1 for t in assigned if t["status"] == "in_progress")
-        pending   = sum(1 for t in assigned if t["status"] == "pending")
-        overdue   = sum(1 for t in assigned
-                        if t["status"] != "completed" and t["due_date"] and t["due_date"] < today)
+        assigned = tasks_by_member.get(mid, [])
+        all_tasks = all_tasks_by_member.get(mid, [])
 
-        # On-time completions: compare the due date against the date the task
-        # actually moved to "completed" (from task_updates), not the date it
-        # was created — a task is on-time if it's finished by its due date,
-        # not simply if the due date happens to fall after task creation.
+        total = len(assigned)
+
+        completed = 0
+        in_prog = 0
+        pending = 0
+        overdue = 0
         on_time = 0
-        for t in assigned:
-            if t["status"] != "completed" or not t["due_date"]:
-                continue
-            completion = query(
-                "SELECT created_at FROM task_updates "
-                "WHERE task_id=%s AND new_status='completed' "
-                "ORDER BY created_at DESC, id DESC LIMIT 1",
-                (t["id"],), one=True,
-            )
-            completed_date = (completion["created_at"] if completion else t["created_at"] or "")[:10]
-            if t["due_date"] >= completed_date:
-                on_time += 1
 
-        updates      = query(
-            "SELECT * FROM task_updates WHERE updated_by=%s AND date(created_at)>=%s",
-            (mid, since),
-        )
-        update_count = len(updates)
+        high_done = 0
+        high_total = 0
 
-        # Average first-response time (hours between task creation and first update).
         response_times = []
-        for t in assigned:
-            first = query(
-                "SELECT created_at FROM task_updates "
-                "WHERE task_id=%s AND updated_by=%s ORDER BY created_at ASC, id ASC LIMIT 1",
-                (t["id"], mid), one=True,
-            )
-            if first and t["created_at"]:
-                try:
-                    ta = datetime.fromisoformat(t["created_at"])
-                    tu = datetime.fromisoformat(first["created_at"])
-                    hrs = (tu - ta).total_seconds() / 3600
-                    if hrs >= 0:
-                        response_times.append(hrs)
-                except ValueError:
-                    pass
-        avg_response = round(sum(response_times) / len(response_times), 1) if response_times else None
 
-        comp_rate      = round(completed / total * 100) if total else 0
-        activity_score = min(update_count * 10, 30)                              # up to 30
-        ontime_score   = round((on_time / completed * 20) if completed else 0)   # up to 20
-        overdue_score  = (10 if overdue == 0 else max(0, 10 - overdue * 5)) if total > 0 else 0
-        score          = min(100, round(comp_rate * 0.40 + activity_score + ontime_score + overdue_score))
-
-        # Daily completion buckets within the current period.
         daily = {}
-        for t in query("SELECT * FROM tasks WHERE assigned_to=%s", (mid,)):
-            if t["status"] == "completed":
-                d = (t["created_at"] or "")[:10]
-                if d >= since:
-                    daily[d] = daily.get(d, 0) + 1
 
-        high_done  = sum(1 for t in assigned if t["priority"] == "high" and t["status"] == "completed")
-        high_total = sum(1 for t in assigned if t["priority"] == "high")
+        # -----------------------
+        # Task statistics
+        # -----------------------
+        for t in assigned:
+
+            status = t["status"]
+
+            if status == "completed":
+                completed += 1
+            elif status == "in_progress":
+                in_prog += 1
+            elif status == "pending":
+                pending += 1
+
+            if (
+                status != "completed"
+                and t["due_date"]
+                and t["due_date"] < today
+            ):
+                overdue += 1
+
+            if t["priority"] == "high":
+                high_total += 1
+                if status == "completed":
+                    high_done += 1
+
+            # -----------------------
+            # On-time completion
+            # -----------------------
+
+            if status == "completed" and t["due_date"]:
+
+                completion = completion_update.get(t["id"])
+
+                completed_dt = (
+                    completion["created_at"]
+                    if completion
+                    else t["created_at"]
+                )
+
+                if completed_dt:
+
+                    completed_date = completed_dt.date().isoformat()
+
+                    if t["due_date"] >= completed_date:
+                        on_time += 1
+
+            # -----------------------
+            # First response time
+            # -----------------------
+
+            first = first_response.get((t["id"], mid))
+
+            if first:
+
+                hrs = (
+                    first["created_at"] - t["created_at"]
+                ).total_seconds() / 3600
+
+                if hrs >= 0:
+                    response_times.append(hrs)
+
+        # -----------------------
+        # Update count
+        # -----------------------
+
+        update_count = 0
+
+        for u in updates_by_user.get(mid, []):
+
+            if u["created_at"].date().isoformat() >= since:
+                update_count += 1
+
+        # -----------------------
+        # Daily completion graph
+        # -----------------------
+
+        for t in all_tasks:
+
+            if t["status"] != "completed":
+                continue
+
+            if not t["created_at"]:
+                continue
+
+            d = t["created_at"].date().isoformat()
+
+            if d >= since:
+                daily[d] = daily.get(d, 0) + 1
+
+        avg_response = (
+            round(sum(response_times) / len(response_times), 1)
+            if response_times
+            else None
+        )
+
+        comp_rate = round(completed / total * 100) if total else 0
+
+        activity_score = min(update_count * 10, 30)
+
+        ontime_score = (
+            round((on_time / completed) * 20)
+            if completed
+            else 0
+        )
+
+        overdue_score = (
+            (10 if overdue == 0 else max(0, 10 - overdue * 5))
+            if total
+            else 0
+        )
+
+        score = min(
+            100,
+            round(
+                comp_rate * 0.40
+                + activity_score
+                + ontime_score
+                + overdue_score
+            ),
+        )
 
         result.append({
-            "id":             mid,
-            "name":           m["name"],
-            "initials":       m["initials"],
-            "color":          m["color"],
-            "role":           m["role"],
-            "total":          total,
-            "completed":      completed,
-            "inProgress":     in_prog,
-            "pending":        pending,
-            "overdue":        overdue,
-            "onTime":         on_time,
-            "updateCount":    update_count,
-            "avgResponseHrs": avg_response,
-            "compRate":       comp_rate,
-            "score":          score,
-            "highDone":       high_done,
-            "highTotal":      high_total,
-            "daily":          daily,
-        })
 
+            "id": mid,
+            "name": m["name"],
+            "initials": m["initials"],
+            "color": m["color"],
+            "role": m["role"],
+
+            "total": total,
+            "completed": completed,
+            "inProgress": in_prog,
+            "pending": pending,
+            "overdue": overdue,
+
+            "onTime": on_time,
+
+            "updateCount": update_count,
+
+            "avgResponseHrs": avg_response,
+
+            "compRate": comp_rate,
+
+            "score": score,
+
+            "highDone": high_done,
+            "highTotal": high_total,
+
+            "daily": daily,
+        })
     result.sort(key=lambda x: x["score"], reverse=True)
     return jsonify(result)
 
@@ -911,7 +1047,15 @@ def change_password():
     if user["password"] != hash_pw(current_pw):
         return jsonify({"error": "Current password is incorrect"}), 401
 
-    mutate("UPDATE users SET password=%s WHERE id=%s", (hash_pw(new_pw), session["user_id"]))
+    mutate(
+    """
+    UPDATE users
+    SET password=%s,
+        session_version=session_version+1
+    WHERE id=%s
+    """,
+    (hash_pw(new_pw), session["user_id"])
+    )
     log_activity("ti-lock", "rgba(99,102,241,0.15)", "#818cf8",
                  f"<strong>{html.escape(session['name'])}</strong> changed their password")
     return jsonify({"ok": True})
@@ -929,7 +1073,15 @@ def admin_reset_password(user_id):
     if not target:
         return jsonify({"error": "User not found"}), 404
 
-    mutate("UPDATE users SET password=%s WHERE id=%s", (hash_pw(new_pw), user_id))
+    mutate(
+    """
+    UPDATE users
+    SET password=%s,
+        session_version=session_version+1
+    WHERE id=%s
+    """,
+    (hash_pw(new_pw), user_id)
+)
     log_activity("ti-shield-lock", "rgba(99,102,241,0.15)", "#818cf8",
                  f"<strong>{html.escape(session['name'])}</strong> reset password for "
                  f"<strong>{html.escape(target['name'])}</strong>")

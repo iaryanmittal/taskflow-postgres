@@ -35,39 +35,59 @@ function getInitials(name) {
 // Normalize to a proper ISO-8601 UTC string before handing it to Date().
 function _parseServerDate(d) {
   if (!d) return null;
-  const s = String(d).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s);              // date-only: spec-parsed as UTC already
-  if (/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);            // already has an explicit offset
-  return new Date(s.replace(' ', 'T') + 'Z');                         // "YYYY-MM-DD HH:MM:SS" -> UTC
-}
 
+  if (d instanceof Date) return d;
+
+  const s = String(d).trim();
+
+  // First try native parsing (works for RFC2822 and ISO8601)
+  let dt = new Date(s);
+  if (!isNaN(dt.getTime())) return dt;
+
+  // Fallback only for old SQLite timestamps:
+  // YYYY-MM-DD HH:MM:SS
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) {
+    dt = new Date(s.replace(" ", "T") + "Z");
+    if (!isNaN(dt.getTime())) return dt;
+  }
+
+  return null;
+}
 function formatDate(d) {
-  if (!d) return '—';
-  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(String(d).trim());
-  const opts = { day: 'numeric', month: 'short' };
-  // Date-only values (due dates) have no time-of-day to localize — format
-  // them in UTC so the calendar day shown never shifts with the viewer's
-  // timezone (was showing one day early for anyone west of UTC).
-  if (isDateOnly) opts.timeZone = 'UTC';
-  return _parseServerDate(d).toLocaleDateString('en-IN', opts);
+  const dt = _parseServerDate(d);
+  if (!dt) return "Invalid Date";
+
+  return dt.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function formatDateTime(d) {
-  if (!d) return '—';
   const dt = _parseServerDate(d);
-  return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
+  if (!dt) return '—';
 
+  return dt.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 function timeAgo(d) {
-  if (!d) return '';
-  const diff = Date.now() - _parseServerDate(d).getTime();
+  const dt = _parseServerDate(d);
+  if (!dt) return "";
+
+  const diff = Date.now() - dt.getTime();
+
   const mins = Math.floor(diff / 60000);
-  if (mins < 1)   return 'just now';
-  if (mins < 60)  return `${mins}m ago`;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24)   return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  if (hrs < 24) return `${hrs}h ago`;
+
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 function statusBadge(s) {
@@ -87,7 +107,29 @@ async function api(path, opts = {}) {
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (_) {}
+
+  // User session expired / password changed / account removed
+  if (res.status === 401) {
+    currentUser = null;
+
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login-page').style.display = 'flex';
+
+    document.getElementById('login-password').value = '';
+
+    toast(data.error || 'Your session has expired. Please log in again.', 'error');
+
+    throw new Error(data.error || 'Unauthorized');
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || 'Request failed');
+  }
+
   return data;
 }
