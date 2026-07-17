@@ -61,6 +61,7 @@ async function openAssignModal() {
   openModal('assign-modal');
 }
 
+console.log("assignTask called");
 async function assignTask() {
   const title    = document.getElementById('task-title').value.trim();
   const desc     = document.getElementById('task-desc').value.trim();
@@ -69,25 +70,54 @@ async function assignTask() {
   const due      = document.getElementById('task-due').value;
   const category = document.getElementById('task-category').value;
 
-  if (!title) { toast('Please enter a task title', 'error'); return; }
+  if (!title) {
+    toast('Please enter a task title', 'error');
+    return;
+  }
+
+  const assignBtn = document.getElementById('assign-task-btn');
+
+  // Prevent double click
+  assignBtn.disabled = true;
+  const originalHTML = assignBtn.innerHTML;
+  assignBtn.innerHTML = '<i class="ti ti-loader-2"></i> Assigning...';
 
   try {
     const newTask = await api('/api/tasks', {
       method: 'POST',
-      body: { title, description: desc, assignedTo: assignee, priority, dueDate: due, category }
+      body: {
+        title,
+        description: desc,
+        assignedTo: assignee,
+        priority,
+        dueDate: due,
+        category
+      }
     });
+
     TASKS.unshift(newTask);
+
     closeModal('assign-modal');
+
     toast(`Task assigned to ${newTask.assignedTo}! ✅`, 'success');
-    document.getElementById('pending-badge').textContent = TASKS.filter(t => t.status === 'pending').length;
-    if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
-    if (document.getElementById('page-tasks').classList.contains('active'))     renderTasks();
+
+    document.getElementById('pending-badge').textContent =
+      TASKS.filter(t => t.status === 'pending').length;
+
+    if (document.getElementById('page-dashboard').classList.contains('active'))
+      renderDashboard();
+
+    if (document.getElementById('page-tasks').classList.contains('active'))
+      renderTasks();
+
   } catch (e) {
+    // Only re-enable if request failed
+    assignBtn.disabled = false;
+    assignBtn.innerHTML = originalHTML;
+
     toast(e.message || 'Failed to assign task', 'error');
   }
-}
-
-// ── Delete Task ───────────────────────────────────────────────────────────
+}// ── Delete Task ───────────────────────────────────────────────────────────
 
 async function deleteTask(id) {
   if (currentUser?.role !== 'admin') { toast('Only admins can delete tasks', 'error'); return; }
