@@ -13,29 +13,110 @@ function filterTasks(f, el) {
 
 // ── Search ────────────────────────────────────────────────────────────────
 
+// ── Global Search ─────────────────────────────────────────────────────────
+let globalSearchQuery = "";
+
 function searchTasks(q) {
-  if (!q) { renderTasks(); return; }
-  const list = TASKS.filter(t =>
-    t.title.toLowerCase().includes(q.toLowerCase()) ||
-    t.id.toLowerCase().includes(q.toLowerCase()) ||
-    t.assignedTo.toLowerCase().includes(q.toLowerCase())
-  );
-  const isAdmin = currentUser?.role === 'admin';
-  document.getElementById('tasks-tbody').innerHTML = list.length
-    ? list.map(t => `
-      <tr>
-        <td style="font-size:11px;color:var(--text3);font-family:monospace">${t.id}</td>
-        <td><div style="font-weight:500">${escapeHtml(t.title)}</div></td>
-        <td>${escapeHtml(t.assignedTo)}</td>
-        <td>${priorityDot(t.priority)}</td>
-        <td>${statusBadge(t.status)}</td>
-        <td style="color:var(--text3)">${formatDate(t.dueDate)}</td>
-        <td>
-          <button class="btn btn-ghost btn-sm" onclick="openDetail('${t.id}')"><i class="ti ti-eye"></i></button>
-          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')"><i class="ti ti-trash"></i></button>` : ''}
-        </td>
-      </tr>`).join('')
-    : '<tr><td colspan="7" class="empty-state">No results</td></tr>';
+  globalSearchQuery = q.trim().toLowerCase();
+  q = globalSearchQuery;
+
+  // ===================== TASKS PAGE =====================
+  if (document.getElementById('page-tasks').classList.contains('active')) {
+
+    if (!q) {
+      renderTasks();
+      return;
+    }
+
+    const list = getFilteredTasks().filter(t =>
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q) ||
+      (t.id || '').toLowerCase().includes(q) ||
+      (t.assignedTo || '').toLowerCase().includes(q)
+    );
+
+    const isAdmin = currentUser?.role === 'admin';
+
+    document.getElementById('tasks-tbody').innerHTML = list.length
+      ? list.map(t => `
+        <tr>
+          <td style="font-size:11px;color:var(--text3);font-family:monospace">${t.id}</td>
+          <td>
+            <div style="font-weight:500">${escapeHtml(t.title)}</div>
+            <div style="font-size:11px;color:var(--text3)">
+              ${escapeHtml((t.description || '').slice(0, 48))}…
+            </div>
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="avatar" style="width:28px;height:28px;font-size:11px;background:${t.assigneeColor}">
+                ${escapeHtml(t.assigneeInitials)}
+              </span>
+              ${escapeHtml(t.assignedTo)}
+            </div>
+          </td>
+          <td>${priorityDot(t.priority)}</td>
+          <td>${statusBadge(t.status)}</td>
+          <td style="color:var(--text3)">${formatDate(t.dueDate)}</td>
+          <td>
+            <div class="task-actions">
+              <button class="btn btn-ghost btn-sm" onclick="openDetail('${t.id}')">
+                <i class="ti ti-eye"></i>
+              </button>
+
+              ${
+                isAdmin
+                  ? `
+                    <button class="btn btn-ghost btn-sm" onclick="openUpdateModal('${t.id}')">
+                      <i class="ti ti-edit"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">
+                      <i class="ti ti-trash"></i>
+                    </button>
+                  `
+                  : t.status !== 'completed'
+                    ? `<button class="btn btn-primary btn-sm" onclick="openUpdateModal('${t.id}')">Update</button>`
+                    : `<span style="color:var(--green);font-size:12px">✓ Done</span>`
+              }
+            </div>
+          </td>
+        </tr>
+      `).join('')
+      : `<tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <i class="ti ti-search-off"></i>
+              <div>No matching tasks found</div>
+            </div>
+          </td>
+        </tr>`;
+
+    return;
+  }
+
+  // ===================== DASHBOARD PAGE =====================
+  if (document.getElementById('page-dashboard').classList.contains('active')) {
+    renderDashboard();
+    return;
+  }
+
+  // ===================== USERS PAGE =====================
+  if (document.getElementById('page-users').classList.contains('active')) {
+    renderUsers();
+    return;
+  }
+
+  // ===================== ACTIVITY PAGE =====================
+  if (document.getElementById('page-activity').classList.contains('active')) {
+    renderActivity();
+    return;
+  }
+
+  // ===================== PERFORMANCE PAGE =====================
+  if (document.getElementById('page-performance').classList.contains('active')) {
+    _buildPage(document.getElementById('perf-root'));
+    return;
+  }
 }
 
 // ── Assign Task ───────────────────────────────────────────────────────────

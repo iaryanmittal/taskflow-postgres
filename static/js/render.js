@@ -49,25 +49,37 @@ async function renderDashboard() {
   document.getElementById('pending-badge').textContent = s.pending || 0;
 
   // Recent tasks
-  const recent = TASKS.slice(0, 5);
-  document.getElementById('dash-task-tbody').innerHTML = recent.length
-    ? recent.map(t => `
-      <tr onclick="openDetail('${t.id}')" style="cursor:pointer">
-        <td>
-          <div style="font-weight:500;font-size:13px">${escapeHtml(t.title)}</div>
-          <div style="font-size:11px;color:var(--text3)">${t.id}</div>
-        </td>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="avatar" style="width:26px;height:26px;font-size:10px;background:${t.assigneeColor}">${escapeHtml(t.assigneeInitials)}</span>
-            ${escapeHtml(t.assignedTo)}
-          </div>
-        </td>
-        <td>${priorityDot(t.priority)}</td>
-        <td>${statusBadge(t.status)}</td>
-        <td style="color:var(--text3)">${formatDate(t.dueDate)}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="5" class="empty-state"><i class="ti ti-inbox"></i>No tasks found</td></tr>';
+  // Recent tasks
+const recent = globalSearchQuery
+  ? TASKS.filter(t =>
+      (t.title || '').toLowerCase().includes(globalSearchQuery) ||
+      (t.description || '').toLowerCase().includes(globalSearchQuery) ||
+      (t.id || '').toLowerCase().includes(globalSearchQuery) ||
+      (t.assignedTo || '').toLowerCase().includes(globalSearchQuery)
+    ).slice(0, 5)
+  : TASKS.slice(0, 5);
+
+document.getElementById('dash-task-tbody').innerHTML = recent.length
+  ? recent.map(t => `
+    <tr onclick="openDetail('${t.id}')" style="cursor:pointer">
+      <td>
+        <div style="font-weight:500;font-size:13px">${escapeHtml(t.title)}</div>
+        <div style="font-size:11px;color:var(--text3)">${t.id}</div>
+      </td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="avatar" style="width:26px;height:26px;font-size:10px;background:${t.assigneeColor}">
+            ${escapeHtml(t.assigneeInitials)}
+          </span>
+          ${escapeHtml(t.assignedTo)}
+        </div>
+      </td>
+      <td>${priorityDot(t.priority)}</td>
+      <td>${statusBadge(t.status)}</td>
+      <td style="color:var(--text3)">${formatDate(t.dueDate)}</td>
+    </tr>
+  `).join('')
+  : '<tr><td colspan="5" class="empty-state"><i class="ti ti-search-off"></i>No matching tasks</td></tr>';
 
   // Activity
   document.getElementById('dash-activity').innerHTML = ACTIVITY.slice(0, 5).map(a => `
@@ -145,48 +157,108 @@ async function renderTasks() {
 async function renderUsers() {
   try {
     USERS = await api('/api/users');
-  } catch (e) { toast('Failed to load users', 'error'); return; }
+  } catch (e) {
+    toast('Failed to load users', 'error');
+    return;
+  }
 
-  document.getElementById('users-grid').innerHTML = USERS.map(u => `
-    <div class="user-card-el">
-      <div class="user-card-header">
-        <div class="user-avatar-lg" style="background:${u.color}">${escapeHtml(u.initials)}</div>
-        <div>
-          <div class="user-card-name">${escapeHtml(u.name)}</div>
-          <div class="user-card-role">${u.role === 'admin' ? 'Administrator' : 'Team Member'}</div>
-          <div class="wa-num"><i class="ti ti-phone" style="color:var(--text3)"></i>${escapeHtml(u.wa) || '—'}</div>
+  const users = globalSearchQuery
+    ? USERS.filter(u =>
+        (u.name || '').toLowerCase().includes(globalSearchQuery) ||
+        (u.role || '').toLowerCase().includes(globalSearchQuery) ||
+        (u.wa || '').toLowerCase().includes(globalSearchQuery)
+      )
+    : USERS;
+
+  document.getElementById('users-grid').innerHTML = users.length
+    ? users.map(u => `
+      <div class="user-card-el">
+        <div class="user-card-header">
+          <div class="user-avatar-lg" style="background:${u.color}">
+            ${escapeHtml(u.initials)}
+          </div>
+
+          <div>
+            <div class="user-card-name">${escapeHtml(u.name)}</div>
+            <div class="user-card-role">
+              ${u.role === 'admin' ? 'Administrator' : 'Team Member'}
+            </div>
+            <div class="wa-num">
+              <i class="ti ti-phone" style="color:var(--text3)"></i>
+              ${escapeHtml(u.wa) || '—'}
+            </div>
+          </div>
+        </div>
+
+        <div class="progress-bar" style="margin-bottom:12px">
+          <div class="progress-fill" style="width:${u.pct}%;background:${u.color}"></div>
+        </div>
+
+        <div class="user-card-stats">
+          <div class="ustat">
+            <div class="ustat-val">${u.taskCount}</div>
+            <div class="ustat-lbl">Tasks</div>
+          </div>
+
+          <div class="ustat">
+            <div class="ustat-val" style="color:var(--accent)">
+              ${u.activeCount}
+            </div>
+            <div class="ustat-lbl">Active</div>
+          </div>
+
+          <div class="ustat">
+            <div class="ustat-val" style="color:var(--green)">
+              ${u.doneCount}
+            </div>
+            <div class="ustat-lbl">Done</div>
+          </div>
         </div>
       </div>
-      <div class="progress-bar" style="margin-bottom:12px">
-        <div class="progress-fill" style="width:${u.pct}%;background:${u.color}"></div>
+    `).join('')
+    : `
+      <div class="empty-state">
+        <i class="ti ti-search-off"></i>
+        <div>No matching users found</div>
       </div>
-      <div class="user-card-stats">
-        <div class="ustat"><div class="ustat-val">${u.taskCount}</div><div class="ustat-lbl">Tasks</div></div>
-        <div class="ustat"><div class="ustat-val" style="color:var(--accent)">${u.activeCount}</div><div class="ustat-lbl">Active</div></div>
-        <div class="ustat"><div class="ustat-val" style="color:var(--green)">${u.doneCount}</div><div class="ustat-lbl">Done</div></div>
-      </div>
-    </div>`).join('');
+    `;
 }
 
 // ── Activity ───────────────────────────────────────────────────────────────
 
 async function renderActivity() {
   await loadActivity();
-  document.getElementById('full-activity-list').innerHTML = ACTIVITY.map(a => `
-    <div class="activity-item">
-      <div class="activity-icon" style="background:${a.color};color:${a.iconColor}"><i class="ti ${a.icon}"></i></div>
-      <div class="activity-body">
-        <div class="activity-text">${a.text}</div>
-        <div class="activity-meta">
-          ${a.viaWa
-            ? `<i class="ti ti-brand-whatsapp" style="color:var(--wa)"></i>via WhatsApp`
-            : `<i class="ti ti-globe"></i>via Dashboard`}
-        </div>
-      </div>
-      <div class="activity-time">${timeAgo(a.time)}</div>
-    </div>`).join('') || '<div style="color:var(--text3);font-size:13px;padding:20px">No activity yet</div>';
-}
 
+  const activity = globalSearchQuery
+    ? ACTIVITY.filter(a =>
+        (a.text || '').toLowerCase().includes(globalSearchQuery)
+      )
+    : ACTIVITY;
+
+  document.getElementById('full-activity-list').innerHTML = activity.length
+    ? activity.map(a => `
+      <div class="activity-item">
+        <div class="activity-icon" style="background:${a.color};color:${a.iconColor}">
+          <i class="ti ${a.icon}"></i>
+        </div>
+
+        <div class="activity-body">
+          <div class="activity-text">${a.text}</div>
+
+          <div class="activity-meta">
+            ${
+              a.viaWa
+                ? `<i class="ti ti-brand-whatsapp" style="color:var(--wa)"></i>via WhatsApp`
+                : `<i class="ti ti-globe"></i>via Dashboard`
+            }
+          </div>
+        </div>
+
+        <div class="activity-time">${timeAgo(a.time)}</div>
+      </div>
+    `).join('')
+    : '<div style="color:var(--text3);font-size:13px;padding:20px">No matching activity found</div>';
+}
 // ── Loaders ────────────────────────────────────────────────────────────────
 
 async function loadTasks() {

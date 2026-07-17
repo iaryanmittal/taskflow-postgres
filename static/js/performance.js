@@ -21,7 +21,11 @@ async function switchPeriod(p) {
 // ── Main page builder ─────────────────────────────────────────────────────
 function _buildPage(root) {
   _destroyCharts();
-  const emp = PERF_DATA;
+  const emp = globalSearchQuery
+  ? PERF_DATA.filter(e =>
+      (e.name || '').toLowerCase().includes(globalSearchQuery)
+    )
+  : PERF_DATA;
   if (!emp.length) {
     root.innerHTML = '<div class="empty-state"><i class="ti ti-chart-off"></i><div>No employee data</div></div>';
     return;
