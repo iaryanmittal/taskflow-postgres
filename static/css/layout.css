@@ -67,7 +67,26 @@
 .page.active { display: block; }
 
 /* ——— Responsive ——— */
-@media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); }
-  .main    { margin-left: 0; }
+/* ——— Responsive ——— */
+@media (max-width: 1024px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .main {
+    margin-left: 0;
+  }
+
+  .topbar {
+    padding: 14px 20px;
+    flex-wrap: wrap;
+  }
+
+  .content-area {
+    padding: 20px;
+  }
+
+  .search-box {
+    max-width: 100%;
+  }
 }

@@ -38,7 +38,7 @@ function _buildPage(root) {
   root.innerHTML = `
 
     <!-- Header row: title + period tabs -->
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+   <div class="perf-header">
       <div>
         <div style="font-family:var(--font-head);font-size:20px;font-weight:800">Performance Analytics</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${periods[PERF_PERIOD]} · ${emp.length} team members</div>
@@ -100,7 +100,7 @@ function _buildPage(root) {
     </div>
 
     <!-- Charts row 1: completion + donut -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="perf-grid-2">
       <div class="perf-card">
         <div class="perf-card-title">Completion Rate</div>
         <div class="perf-card-sub">% of assigned tasks completed</div>
@@ -114,7 +114,7 @@ function _buildPage(root) {
     </div>
 
     <!-- Charts row 2: scores + radar -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="perf-grid-2">
       <div class="perf-card">
         <div class="perf-card-title">Performance Scores</div>
         <div class="perf-card-sub">Composite score out of 100</div>
@@ -135,7 +135,7 @@ function _buildPage(root) {
     </div>
 
     <!-- Charts row 4: overdue + high-priority -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="perf-grid-2">
       <div class="perf-card">
         <div class="perf-card-title">Overdue Tasks</div>
         <div class="perf-card-sub">Lower = better punctuality</div>
@@ -189,21 +189,61 @@ const _GRID = 'rgba(255,255,255,0.05)';
 
 // 1. Completion rate
 function _chartCompletion(emp) {
+
+  const canvas = document.getElementById("ch-completion");
+  if (canvas && canvas.parentElement) {
+    canvas.parentElement.style.height = "320px";
+  }
+
   _mkChart('ch-completion', {
     type: 'bar',
     data: {
       labels: emp.map(e => e.name.split(' ')[0]),
-      datasets: [{ label: '%', data: emp.map(e => e.compRate),
-        backgroundColor: emp.map(e => e.color+'bb'), borderColor: emp.map(e => e.color),
-        borderWidth:2, borderRadius:5 }]
+      datasets: [{
+        label: '%',
+        data: emp.map(e => e.compRate),
+        backgroundColor: emp.map(e => e.color + 'bb'),
+        borderColor: emp.map(e => e.color),
+        borderWidth: 2,
+        borderRadius: 5
+      }]
     },
-    options: { responsive:true, maintainAspectRatio:true,
-      plugins:{ legend:{ display:false } },
-      scales:{ y:{ min:0, max:100, ticks:{ callback:v=>v+'%' }, grid:{ color:_GRID } }, x:{ grid:{ display:false } } }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+
+      scales: {
+        y: {
+          min: 0,
+          max: 100,
+          ticks: {
+            callback: v => v + '%'
+          },
+          grid: {
+            color: _GRID
+          }
+        },
+
+        x: {
+          grid: {
+            display: false
+          },
+          ticks: {
+            autoSkip: false,
+            maxRotation: 45,
+            minRotation: 45
+          }
+        }
+      }
     }
   });
 }
-
 // 2. Donut
 function _chartDonut(emp) {
   const t = emp.reduce((a,e) => ({ c:a.c+e.completed, i:a.i+e.inProgress, p:a.p+e.pending, o:a.o+e.overdue }), {c:0,i:0,p:0,o:0});
@@ -332,14 +372,43 @@ function _chartOverdue(emp) {
     type: 'bar',
     data: {
       labels: emp.map(e => e.name.split(' ')[0]),
-      datasets: [{ label: 'Overdue', data: emp.map(e => e.overdue),
+      datasets: [{
+        label: 'Overdue',
+        data: emp.map(e => e.overdue),
         backgroundColor: emp.map(e => e.overdue > 0 ? '#ef444477' : '#22c55e44'),
         borderColor: emp.map(e => e.overdue > 0 ? '#ef4444' : '#22c55e'),
-        borderWidth:2, borderRadius:5 }]
+        borderWidth: 2,
+        borderRadius: 5
+      }]
     },
-    options: { responsive:true, maintainAspectRatio:true,
-      plugins:{ legend:{ display:false } },
-      scales:{ y:{ beginAtZero:true, ticks:{ stepSize:1 }, grid:{ color:_GRID } }, x:{ grid:{ display:false } } }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+
+      scales: {
+          x: {
+        stacked: true,
+        grid: {
+            display: false
+        }
+    },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1
+          },
+          grid: {
+            color: _GRID
+          }
+        }
+      }
     }
   });
 }
@@ -355,7 +424,7 @@ function _chartHighPri(emp) {
         { label:'Pending', data: emp.map(e => e.highTotal - e.highDone), backgroundColor:'#ef444455', borderColor:'#ef4444', borderWidth:2, borderRadius:5 },
       ]
     },
-    options: { responsive:true, maintainAspectRatio:true,
+    options: { responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ position:'bottom', labels:{ padding:10, usePointStyle:true, boxWidth:7 } } },
       scales:{ x:{ stacked:true, grid:{ display:false } }, y:{ stacked:true, beginAtZero:true, ticks:{ stepSize:1 }, grid:{ color:_GRID } } }
     }
