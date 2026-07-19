@@ -427,28 +427,67 @@ def me():
 @app.get("/api/users")
 @login_required
 def get_users():
+    # Get all active users
     rows = query("""
-    SELECT
-        id, name, initials, role, color, email
-    FROM users
-    WHERE is_active = TRUE
-    ORDER BY name
-""")
+        SELECT
+            id, name, initials, role, color, email
+        FROM users
+        WHERE is_active = TRUE
+        ORDER BY name
+    """)
+
+    # Get all task statuses in one query
+    tasks = query("""
+        SELECT assigned_to, status
+        FROM tasks
+    """)
+
+    # Group task statistics by user
+    stats_by_user = {}
+
+    for task in tasks:
+        uid = task["assigned_to"]
+
+        if uid not in stats_by_user:
+            stats_by_user[uid] = {
+                "total": 0,
+                "done": 0,
+                "active": 0
+            }
+
+        stats_by_user[uid]["total"] += 1
+
+        if task["status"] == "completed":
+            stats_by_user[uid]["done"] += 1
+        elif task["status"] == "in_progress":
+            stats_by_user[uid]["active"] += 1
+
+    # Build response
     out = []
+
     for u in rows:
-        stats = query("SELECT status FROM tasks WHERE assigned_to=%s", (u["id"],))
-        total  = len(stats)
-        done   = sum(1 for t in stats if t["status"] == "completed")
-        active = sum(1 for t in stats if t["status"] == "in_progress")
+        stats = stats_by_user.get(
+            u["id"],
+            {
+                "total": 0,
+                "done": 0,
+                "active": 0
+            }
+        )
+
+        total = stats["total"]
+        done = stats["done"]
+        active = stats["active"]
+
         out.append({
             **_public_user(u),
-            "taskCount":  total,
-            "doneCount":  done,
+            "taskCount": total,
+            "doneCount": done,
             "activeCount": active,
             "pct": round(done / total * 100) if total else 0,
         })
-    return jsonify(out)
 
+    return jsonify(out)
 # ─── Admin: team management (add / remove members) ─────────────────────────
 
 @app.get("/api/admin/team")
@@ -581,24 +620,61 @@ _TASK_SELECT = """
 @app.get("/api/tasks")
 @login_required
 def get_tasks():
-    uid  = session["user_id"]
+    uid = session["user_id"]
     role = session["role"]
 
+    # Fetch tasks
     if role == "admin":
         rows = query(_TASK_SELECT + " ORDER BY t.created_at DESC, t.id DESC")
     else:
-        rows = query(_TASK_SELECT + " WHERE t.assigned_to = %s ORDER BY t.created_at DESC, t.id DESC", (uid,))
+        rows = query(
+            _TASK_SELECT + " WHERE t.assigned_to = %s ORDER BY t.created_at DESC, t.id DESC",
+            (uid,)
+        )
 
-    tasks = []
-    for t in rows:
+    # No tasks? Return immediately
+    if not rows:
+        return jsonify([])
+
+    # Fetch ALL updates in ONE query
+    task_ids = tuple(t["id"] for t in rows)
+
+    if len(task_ids) == 1:
         updates = query("""
             SELECT tu.*, u.name AS updater_name
             FROM task_updates tu
             JOIN users u ON tu.updated_by = u.id
             WHERE tu.task_id = %s
             ORDER BY tu.created_at DESC, tu.id DESC
-        """, (t["id"],))
-        tasks.append(_serialize_task(t, updates))
+        """, (task_ids[0],))
+    else:
+        placeholders = ",".join(["%s"] * len(task_ids))
+
+        updates = query(f"""
+            SELECT tu.*, u.name AS updater_name
+            FROM task_updates tu
+            JOIN users u ON tu.updated_by = u.id
+            WHERE tu.task_id IN ({placeholders})
+            ORDER BY tu.created_at DESC, tu.id DESC
+        """, task_ids)
+
+    # Group updates by task_id
+    updates_by_task = {}
+
+    for upd in updates:
+        updates_by_task.setdefault(upd["task_id"], []).append(upd)
+
+    # Build response
+    tasks = []
+
+    for t in rows:
+        tasks.append(
+            _serialize_task(
+                t,
+                updates_by_task.get(t["id"], [])
+            )
+        )
+
     return jsonify(tasks)
 
 @app.post("/api/tasks")
@@ -627,7 +703,7 @@ def create_task():
     if not user["is_active"]:
         return jsonify({"error": "That team member has been removed"}), 400
 
-    # print(f"[TIME] Validation: {time.perf_counter() - start:.3f}s")
+    print(f"[TIME] Validation: {time.perf_counter() - start:.3f}s")
 
     # Generate a unique Task-XXX id.
     count = query("SELECT COUNT(*) AS c FROM tasks", one=True)["c"]
@@ -636,7 +712,7 @@ def create_task():
         count += 1
         task_id = f"Task-{count+1:03d}"
 
-    # print(f"[TIME] Task ID: {time.perf_counter() - start:.3f}s")
+    print(f"[TIME] Task ID: {time.perf_counter() - start:.3f}s")
 
     mutate(
         "INSERT INTO tasks (id,title,description,assigned_by,assigned_to,priority,status,due_date,category) "
@@ -645,7 +721,7 @@ def create_task():
          session["user_id"], assignee, priority, "pending", due, category),
     )
 
-    # print(f"[TIME] Insert: {time.perf_counter() - start:.3f}s")
+    print(f"[TIME] Insert: {time.perf_counter() - start:.3f}s")
 
     log_activity(
         "ti-plus", "rgba(79,142,247,0.15)", "#4f8ef7",
@@ -654,7 +730,7 @@ def create_task():
         via_wa=True,
     )
 
-    # print(f"[TIME] Log Activity: {time.perf_counter() - start:.3f}s")
+    print(f"[TIME] Log Activity: {time.perf_counter() - start:.3f}s")
 
     task = query(_TASK_SELECT + " WHERE t.id=%s", (task_id,), one=True)
 
@@ -666,7 +742,7 @@ def create_task():
         ORDER BY tu.created_at DESC, tu.id DESC
     """, (task_id,))
 
-    # print(f"[TIME] Fetch Task: {time.perf_counter() - start:.3f}s")
+    print(f"[TIME] Fetch Task: {time.perf_counter() - start:.3f}s")
 
     serialized = _serialize_task(task, updates)
 
@@ -676,11 +752,11 @@ def create_task():
         one=True
     )
 
-    # print(f"[TIME] Before Webhook: {time.perf_counter() - start:.3f}s")
+    print(f"[TIME] Before Webhook: {time.perf_counter() - start:.3f}s")
 
     notify_n8n_task_assigned(serialized, user, assigner_row)
 
-    # print(f"[TIME] Total Request: {time.perf_counter() - start:.3f}s")
+    print(f"[TIME] Total Request: {time.perf_counter() - start:.3f}s")
 
     return jsonify(serialized), 201
 

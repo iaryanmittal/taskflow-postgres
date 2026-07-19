@@ -127,12 +127,17 @@ async function openAssignModal() {
   // Populate assignee dropdown with every team member except the acting admin.
   // Admins are tracked in performance too, so they're valid assignees.
   try {
-    if (!USERS.length) USERS = await api('/api/users');
+    await loadUsers();
+
     const assignees = USERS.filter(u => u.id !== currentUser?.id);
+
     document.getElementById('task-assignee').innerHTML = assignees.map(u =>
       `<option value="${u.id}">${escapeHtml(u.name)}${u.role === 'admin' ? ' (Admin)' : ''}</option>`
     ).join('');
-  } catch (e) { toast('Failed to load users', 'error'); return; }
+} catch (e) {
+    toast('Failed to load users', 'error');
+    return;
+}
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 3);
@@ -177,6 +182,10 @@ async function assignTask() {
     });
 
     TASKS.unshift(newTask);
+    if (STATS.total !== undefined) {
+    STATS.total++;
+    STATS.pending++;
+}
 
     closeModal('assign-modal');
 

@@ -5,6 +5,11 @@ let USERS    = [];
 let ACTIVITY = [];
 let STATS    = {};
 
+let tasksLoaded = false;
+let usersLoaded = false;
+let activityLoaded = false;
+let statsLoaded = false;
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
 async function renderDashboard() {
@@ -155,11 +160,10 @@ async function renderTasks() {
 // ── Users ──────────────────────────────────────────────────────────────────
 
 async function renderUsers() {
-  try {
-    USERS = await api('/api/users');
-  } catch (e) {
-    toast('Failed to load users', 'error');
-    return;
+    await loadUsers();
+
+  if (!USERS.length) {
+      return;
   }
 
   const users = globalSearchQuery
@@ -261,14 +265,42 @@ async function renderActivity() {
 }
 // ── Loaders ────────────────────────────────────────────────────────────────
 
-async function loadTasks() {
-  try { TASKS = await api('/api/tasks'); } catch (e) { toast('Failed to load tasks', 'error'); }
+async function loadTasks(force = false) {
+  if (tasksLoaded && !force) return;
+
+  try {
+    TASKS = await api('/api/tasks');
+    tasksLoaded = true;
+  } catch (e) {
+    toast('Failed to load tasks', 'error');
+  }
 }
 
-async function loadStats() {
-  try { STATS = await api('/api/stats'); } catch (e) {}
+async function loadUsers(force = false) {
+  if (usersLoaded && !force) return;
+
+  try {
+    USERS = await api('/api/users');
+    usersLoaded = true;
+  } catch (e) {
+    toast('Failed to load users', 'error');
+  }
 }
 
-async function loadActivity() {
-  try { ACTIVITY = await api('/api/activity'); } catch (e) {}
+async function loadStats(force = false) {
+  if (statsLoaded && !force) return;
+
+  try {
+    STATS = await api('/api/stats');
+    statsLoaded = true;
+  } catch (e) {}
+}
+
+async function loadActivity(force = false) {
+  if (activityLoaded && !force) return;
+
+  try {
+    ACTIVITY = await api('/api/activity');
+    activityLoaded = true;
+  } catch (e) {}
 }
