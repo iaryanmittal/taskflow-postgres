@@ -143,11 +143,7 @@ def notify_n8n_task_assigned(task: dict, assignee_row: dict, assigner_row: dict)
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
-    threading.Thread(
-        target=_post_webhook,
-        args=(N8N_WEBHOOK_URL, payload),
-        daemon=True,
-    ).start()
+    _post_webhook(N8N_WEBHOOK_URL, payload)
 
 
 def _default_password(full_name: str) -> str:
